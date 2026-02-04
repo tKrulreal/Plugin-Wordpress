@@ -29,6 +29,22 @@ function spm_add_admin_menu() {
 // Nội dung trang admin
 function spm_admin_page_content() {
     global $wpdb;
+    // --- Toggle lazy load cho từng bài ---
+if (isset($_GET['toggle_lazy'])) {
+    $post_id = intval($_GET['toggle_lazy']);
+    $current = intval($_GET['status']);
+    $new_value = $current ? 0 : 1;
+    update_post_meta($post_id, '_lazy_enabled', $new_value);
+
+    echo '<div class="updated notice"><p>🖼️ Lazy loading cho bài #' . esc_html($post_id) . ' đã ' . ($new_value ? 'bật' : 'tắt') . '.</p></div>';
+
+    // Tự reload sau 1.5 giây
+    echo '<script>
+        setTimeout(function(){
+            window.location.href = "admin.php?page=simple-post-manager";
+        }, 1500);
+    </script>';
+}
 
     echo '<div class="wrap">';
     // --- CSS giao diện plugin ---
@@ -297,6 +313,7 @@ function spm_admin_page_content() {
                 <th>Ảnh</th>
                 <th>Ngày đăng</th>
                 <th>Trạng thái</th>
+                <th>Trạng thái</th>
                 <th>Hành động</th>
             </tr></thead><tbody>';
 
@@ -320,6 +337,16 @@ function spm_admin_page_content() {
                 echo '<td>' . $thumb_html . '</td>';
                 echo '<td>' . esc_html($p->post_date) . '</td>';
                 echo '<td>' . esc_html($p->post_status) . '</td>';
+                // Kiểm tra meta lazy load của bài viết
+$lazy_status = get_post_meta($p->ID, '_lazy_enabled', true);
+if ($lazy_status === '') $lazy_status = 1; // mặc định bật
+
+$lazy_toggle_url = admin_url('admin.php?page=simple-post-manager&toggle_lazy=' . $p->ID . '&status=' . $lazy_status);
+$lazy_text = $lazy_status ? '🟢 Bật' : '🔴 Tắt';
+$lazy_class = $lazy_status ? 'button' : 'button button-secondary';
+
+echo '<td><a href="' . esc_url($lazy_toggle_url) . '" class="' . esc_attr($lazy_class) . '">' . $lazy_text . '</a></td>';
+
                 echo '<td>
                         <a href="' . esc_url($edit_url) . '" class="button">Sửa</a>
                         <a href="' . esc_url($del_url) . '" class="button button-danger" onclick="return confirm(\'Xóa bài này?\')">Xóa</a>
@@ -355,5 +382,30 @@ function spm_admin_page_content() {
 
         echo '</div>';
     }
+    // --- Áp dụng lazy load ảnh theo cài đặt bài viết ---
+add_filter('the_content', 'spm_lazy_control_in_content', 20);
+function spm_lazy_control_in_content($content) {
+    global $post;
+    if (!$post) return $content;
+
+    $lazy_status = get_post_meta($post->ID, '_lazy_enabled', true);
+
+    // Nếu lazy load bị tắt
+    if ($lazy_status === '0' || $lazy_status === 0) {
+        // Loại bỏ thuộc tính loading="lazy"
+        $content = preg_replace('/loading=["\']lazy["\']/', '', $content);
+    }
+    return $content;
+}
+
+// --- Áp dụng cho ảnh đại diện (featured image) ---
+add_filter('post_thumbnail_html', 'spm_lazy_control_thumbnail', 20, 3);
+function spm_lazy_control_thumbnail($html, $post_id, $post_thumbnail_id) {
+    $lazy_status = get_post_meta($post_id, '_lazy_enabled', true);
+    if ($lazy_status === '0' || $lazy_status === 0) {
+        $html = preg_replace('/loading=["\']lazy["\']/', '', $html);
+    }
+    return $html;
+}
 
 ?>
